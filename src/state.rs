@@ -22,6 +22,7 @@ impl AppState {
             .await
             .context("failet to connect to database")?;
 
+        // TODO: migrations
         // db.push_schema()
         //     .await
         //     .context("failed to push database schema")?;
