@@ -1,0 +1,23 @@
+[package]
+name = "discord_link_spotify_api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+async-trait = "0.1.92"
+axum = { version = "0.8.9", features = ["macros"] }
+dotenvy = "0.15.7"
+envy = "0.4.2"
+jiff = "0.2.39"
+reqwest = { version = "0.13.5", features = ["form", "json"] }
+serde = "1.0.229"
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+toasty = { version = "0.11.0", features = ["jiff", "postgresql"] }
+tokio = { version = "1.54.1", features = ["full"] }
+tower-sessions = { version = "0.15.0", features = ["memory-store"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = "2.5.8"
+uuid = "1.29.1"
