@@ -1,19 +1,19 @@
 use crate::{
-    database::repository,
-    errors::AppError,
+    AppError, AppResponse, AppState, database,
     handlers::auth::CallbackQuery,
-    oauth::{OAuthProvider, generate_state},
-    session::store::{AUTH_SERVICE_KEY, DISCORD_USER_ID_KEY, SPOTIFY_STATE_KEY},
-    state::AppState,
+    oauth::OAuthProvider,
+    session::{
+        ext::SessionExt,
+        store::{AUTH_SERVICE_KEY, DISCORD_USER_ID_KEY, SPOTIFY_STATE_KEY},
+    },
 };
 use axum::{
     extract::{Query, State},
-    response::{IntoResponse, Redirect, Response},
+    response::{IntoResponse, Redirect},
 };
-use jiff::{Span, Timestamp};
 use tower_sessions::Session;
 
-pub async fn connect(session: Session) -> Result<Response, AppError> {
+pub async fn connect(session: Session) -> AppResponse {
     // Store service key to session
     session
         .insert(AUTH_SERVICE_KEY, "spotify")
@@ -27,16 +27,12 @@ pub async fn connect(session: Session) -> Result<Response, AppError> {
 pub async fn login(
     State(AppState { spotify, .. }): State<AppState>,
     session: Session,
-) -> Result<Response, AppError> {
-    // Store unique state to session
-    let state = generate_state();
-    session
-        .insert(SPOTIFY_STATE_KEY, &state)
-        .await
-        .map_err(|e| AppError::Session(e.to_string()))?;
-
+) -> AppResponse {
     // Generate url for oauth
-    let url = (*spotify).clone().generate_url(&vec!["streaming"], &state);
+    let (url, state) = (*spotify)
+        .clone()
+        .generate_url_with_state(&vec!["streaming"]);
+    session.set(SPOTIFY_STATE_KEY, &state).await?;
 
     // Redirect
     Ok(Redirect::temporary(&url).into_response())
@@ -46,44 +42,24 @@ pub async fn callback(
     State(AppState { db, spotify, .. }): State<AppState>,
     Query(CallbackQuery { code, state }): Query<CallbackQuery>,
     session: Session,
-) -> Result<Response, AppError> {
+) -> AppResponse {
     // Restore and check spotify oauth state
     session
-        .remove::<String>(SPOTIFY_STATE_KEY)
-        .await
-        .map_err(|e| AppError::Session(e.to_string()))?
-        .filter(|expected| expected == &state)
-        .ok_or(AppError::InvalidState)?;
+        .take_matching(SPOTIFY_STATE_KEY, &state, AppError::InvalidState)
+        .await?;
 
     // Exchange code for token
     let token = (*spotify).clone().exchange_code_for_token(&code).await?;
-    let access_token = token.access_token;
-    let refresh_token = token
-        .refresh_token
-        .ok_or_else(|| AppError::Internal("spotify: refresh_token is missing".into()))?;
-    let expires_in = token
-        .expires_in
-        .ok_or_else(|| AppError::Internal("spotify: expires_in is missing".into()))?;
-    let expires_at = Timestamp::now() + Span::new().seconds(expires_in as i64);
 
     // Restore user id from session
     let user_id = session
-        .remove::<String>(DISCORD_USER_ID_KEY)
-        .await
-        .map_err(|e| AppError::Session(e.to_string()))?
+        .take::<String>(DISCORD_USER_ID_KEY)
+        .await?
         .ok_or(AppError::MissingUserId)?;
 
     // Upsert tokens to database
     let mut db = db.clone();
-    repository::upsert(
-        &mut db,
-        user_id,
-        access_token.into(),
-        refresh_token.into(),
-        expires_at,
-    )
-    .await
-    .map_err(|e| AppError::Database(e))?;
+    database::upsert(&mut db, user_id, token).await?;
 
     // Success page
     Ok("Success authorized".into_response())

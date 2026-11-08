@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    oauth::{discord::DiscordOAuth, spotify::SpotifyOAuth},
+    oauth::providers::{discord::DiscordOAuth, spotify::SpotifyOAuth},
 };
 use anyhow::{Context, Result};
 use std::sync::Arc;
