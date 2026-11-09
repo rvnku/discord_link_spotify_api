@@ -1,0 +1,6 @@
+version = 1
+
+[[migrations]]
+id = 7936358593301569605
+name = "0000_migration.sql"
+snapshot_name = "0000_snapshot.toml"
